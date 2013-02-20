@@ -1,0 +1,27 @@
+extends layout
+
+block content
+	#quakeTime
+		p= title
+	#showInstructs
+		p instructions
+	#showAbout
+		p about
+	#instructs
+		p use the slider at left to zoom in and out
+		p aqua dots represent the 20 biggest cities in the world, at magnifications  past 6x city names are displayed
+		p press 1 to show magnitude
+		p press 2 to show location
+		p press 3 to show latitude/longitude
+		p press 4 to show date
+		p press 5 to show depth
+		p press any other key to hide info
+		p click this box to to hide
+	#about
+		p quake time is a visualization of earthquakes over the last 20 days, data is pulled from the USGS and updated daily. This project was created in node.js using the express application framework. The visuals are driven by processing.js
+		p click this box to hide
+	#canvasContainer
+		canvas#myCanvas(width='100%', height='500')
+
+	
+

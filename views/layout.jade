@@ -1,0 +1,343 @@
+doctype 5
+html
+	head
+		title= title
+		link(rel='stylesheet', href='/stylesheets/style.css')
+		script(type='text/javascript', src='//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js')
+		script(type='text/javascript', src='/socket.io/socket.io.js')
+		script(type='text/javascript',src='/javascripts/processing.js')
+		
+		script(type='text/javascript')
+			$(document).ready(function(){
+				$("#showInstructs").click(function(){
+					$("#instructs").stop().fadeToggle(200);
+					$("#about").fadeOut(0);
+				});
+				$("#showAbout").click(function(){
+					$("#about").stop().fadeToggle(200);
+					$("#instructs").fadeOut(00);
+				});
+				
+				$("#about, #instructs").click(function(){
+					$(this).fadeOut(200);
+				})
+			});
+			
+			var places = [["Beijing","China"],["Bogota","Colombia"],["Buenos Aires","Argentina"],["Cairo","Egypt"],["Delhi","India"],["Dhaka","Bangladesh"],["Guangzhou","China"],["Istanbul","Turkey"],["Jakarta","Indonesia"],["Karachi","Pakistan"],["Kinshasa","Democratic Republic of the Congo"],["Kolkata","India"],["Lagos","Nigeria"],["Lima","Peru"],["London","United Kingdom"],["Los Angeles","United States"],["Manila","Philippines"],["Mexico City","Mexico"],["Moscow","Russia"],["Mumbai","India"],["New York City","United States"],["Osaka","Japan"],["Rio de Janeiro","Brazil"],["Sao Paulo","Brazil"],["Seoul","South Korea"],["Shanghai","China"],["Shenzhen","China"],["Tehran","Iran"],["Tianjin","China"],["Tokyo","Japan"]]
+
+			var geodata = [39.90601, 116.387909,4.636355, -74.113564,-34.608521, -58.373539,30.04995, 31.248605,24.6353, 81.56905,23.7098, 90.407112,23.11346, 113.260273,41.040855, 28.986183,-6.237445, 106.820396,24.876355, 67.0284,-4.33221, 15.29176,22.52667, 88.34616,6.705219, 3.261149,-12.0436, -77.021217,51.506325, -0.127144,34.05349, -118.245319,14.588465, 121.010559,19.4319, -99.132851,55.75695, 37.614975,19.076191, 72.875877,40.71455, -74.007124,34.677471, 135.503235,-22.976734, -43.195084,-23.56288, -46.654659,37.557121, 126.977375,31.247709, 121.472618,22.548676, 114.1059,35.70475, 51.414076,38.95892, 117.63343,35.670479, 139.740921
+			]
+
+			var cityData = [];
+			for(var i = 0; i < places.length;i++){
+				var x = {
+					city: places[i][0],
+					country: places[i][1],
+					lat:geodata[2*i],
+					lon:geodata[2*i+1]
+				}
+				cityData.push(x)
+			}
+			
+			function City(cityDataPoint) {
+				this.city = cityDataPoint.city;
+				this.country = cityDataPoint.country;
+				this.cityLat = cityDataPoint.lat;
+				this.cityLon = cityDataPoint.lon;
+				this.cityMapLat = 0;
+				this.cityMapLon = 0;
+				this.cityTwinkle = Math.random()/2;
+				this.cityTwinkeState = 1;
+				this.cityAlpha = 50;
+			}
+			
+			function Quake(quakeDataPoint,index) {
+				this.bigIndex = index*20;
+				this.src = quakeDataPoint.src;
+				this.date = new Date(quakeDataPoint.date);
+				this.dateString = this.date.toLocaleString();
+				this.lat = quakeDataPoint.lat;
+				this.lon = quakeDataPoint.lon;
+				this.mag = quakeDataPoint.mag;
+				this.reg = quakeDataPoint.reg;
+				this.depth = quakeDataPoint.depth;
+				this.maxSize = Math.pow(this.mag+1,3);
+				this.rate = this.maxSize/255;
+				this.state = 0;
+				this.curSize = 0;
+				this.mapLon = 0;
+				this.mapLat = 0;
+				this.alpha = 0;
+				this.color = 0;
+				this.test = false;
+			}
+			
+			Quake.prototype.initColor = function(p) {
+				this.color = p.color()
+			}
+			
+			City.prototype.calcPos = function(p,mapScale,mapOffsetX,mapOffsetY) { 
+				this.cityMapLon = p.map(this.cityLon,-180,180,-p.width/2+mapOffsetX,p.width/2+mapOffsetX);
+				this.cityMapLat = p.map(this.cityLat,90,-90,-p.height/2+mapOffsetY,p.height/2+mapOffsetY);
+			}
+			
+			City.prototype.display = function(p,mapScale) {
+				p.fill(40,20,100,this.cityAlpha);
+				p.noStroke();
+				this.cityAlpha += this.cityTwinkle;
+				if (mapScale < 6) p.ellipse(this.cityMapLon*mapScale,this.cityMapLat*mapScale,3,3);
+
+				else if (mapScale > 6) {
+					p.ellipse(this.cityMapLon*mapScale,this.cityMapLat*mapScale,6,6);
+					p.fill(40,20,100);
+					p.text(this.city+", "+this.country,this.cityMapLon*mapScale -6,this.cityMapLat*mapScale -3)
+				}
+				if(this.cityAlpha > 100 || this.cityAlpha < 50 ) this.cityTwinkle = - this.cityTwinkle;
+			}
+			
+			Quake.prototype.calcPos = function(p,mapScale,mapOffsetX,mapOffsetY) {
+				this.mapLon = p.map(this.lon,-180,180,-p.width/2+mapOffsetX,p.width/2+mapOffsetX);
+				this.mapLat = p.map(this.lat,90,-90,-p.height/2+mapOffsetY,p.height/2+mapOffsetY);
+				
+			}
+			Quake.prototype.stateControl = function(p,fc,mapScale,setShow) {
+				if (this.state == 0) this.init(fc);
+				else if (this.state == 1) this.expand(p,fc,mapScale,setShow); 
+				if (this.state == 2) this.fade(p,mapScale,setShow);
+			}
+			
+			Quake.prototype.tester = function() {
+				return this.test;
+			}
+			
+			
+			Quake.prototype.showText = function(p,mapScale,setShow) {
+					if (setShow == 1){
+			p.fill(100,100,100,this.alpha/2);
+			p.line(this.mapLon*mapScale,this.mapLat*mapScale,this.mapLon*mapScale+this.curSize*mapScale/2,this.mapLat*mapScale-this.curSize*mapScale/2);
+			p.text("magnitude: " + this.mag,this.mapLon*mapScale+this.curSize*mapScale/2,this.mapLat*mapScale-this.curSize*mapScale/2);
+				}	else if (setShow == 2){
+				p.fill(100,100,100,this.alpha/2);
+				p.line(this.mapLon*mapScale,this.mapLat*mapScale,this.mapLon*mapScale+this.curSize*mapScale/2,this.mapLat*mapScale-this.curSize*mapScale/2);
+				p.text("region: \n" + this.reg,this.mapLon*mapScale+this.curSize*mapScale/2,this.mapLat*mapScale-this.curSize*mapScale/2);
+					}
+					else if (setShow == 3){
+					p.fill(100,100,100,this.alpha/2);
+					p.line(this.mapLon*mapScale,this.mapLat*mapScale,this.mapLon*mapScale+this.curSize*mapScale/2,this.mapLat*mapScale-this.curSize*mapScale/2);
+					p.text("date: \n" + this.dateString,this.mapLon*mapScale+this.curSize*mapScale/2,this.mapLat*mapScale-this.curSize*mapScale/2);
+						} else if (setShow == 4){
+						p.fill(100,100,100,this.alpha/2);
+						p.line(this.mapLon*mapScale,this.mapLat*mapScale,this.mapLon*mapScale+this.curSize*mapScale/2,this.mapLat*mapScale-this.curSize*mapScale/2);
+						p.text("lat: " + this.lat,this.mapLon*mapScale+this.curSize*mapScale/2,this.mapLat*mapScale-this.curSize*mapScale/2);
+						p.text("lon: " + this.lon,this.mapLon*mapScale+this.curSize*mapScale/2,this.mapLat*mapScale-this.curSize*mapScale/2+16);
+							} else if (setShow == 5){
+							p.fill(100,100,100,this.alpha/2);
+							p.line(this.mapLon*mapScale,this.mapLat*mapScale,this.mapLon*mapScale+this.curSize*mapScale/2,this.mapLat*mapScale-this.curSize*mapScale/2);
+							p.text("depth: " + this.depth+"km",this.mapLon*mapScale+this.curSize*mapScale/2,this.mapLat*mapScale-this.curSize*mapScale/2);
+								}
+				}
+			
+			Quake.prototype.init = function(fc) {
+				if(fc == this.bigIndex) {
+					this.state = 1;
+					this.test = true;
+					}
+			}
+			Quake.prototype.expand = function(p,fc,mapScale,setShow) {
+					this.test = false;
+				if (this.curSize < this.maxSize) {
+					this.curSize+=this.rate;
+					p.noFill();
+					p.stroke(255,this.alpha/2);	
+					p.point(this.mapLon*mapScale,this.mapLat*mapScale);
+					
+					p.ellipse(this.mapLon*mapScale,this.mapLat*mapScale,this.curSize*mapScale,this.curSize*mapScale);
+					this.showText(p,mapScale,setShow);
+					this.alpha++;
+					
+				} else {
+					this.state = 2;
+					
+				}
+			}
+			
+
+			
+			Quake.prototype.fade = function(p,mapScale,setShow) {
+				if (this.alpha > 0) {
+					
+					p.noFill();
+					p.stroke(255,this.alpha/2);	
+					p.point(this.mapLon*mapScale,this.mapLat*mapScale);
+					p.ellipse(this.mapLon*mapScale,this.mapLat*mapScale,this.curSize*mapScale,this.curSize*mapScale);
+					this.showText(p,mapScale,setShow);
+					this.alpha-=8;
+				} else {
+					this.curSize = 0;
+					this.state = 0;
+					this.alpha = 0;
+				}
+			}
+			
+			function zoomControl(p,mapScale,zoomPos) { 
+				p.stroke(50);
+				p.line(10,40,10,p.height-40);
+				p.rectMode(p.CENTER);
+				if (p.mouseX < 50 && p.mouseX > 0) {
+					p.fill(100,200,100);
+					p.cursor(p.HAND);
+				} else {
+					p.cursor(p.ARROW);
+					p.fill(100);
+				}
+				p.rect(10,zoomPos,18,18);
+				p.rectMode(p.CORNER);
+				p.point(24,zoomPos);
+
+			}
+			
+			function scaleValue(p,zoomPos) {
+				var rescale = p.map(zoomPos,40,p.height-40,30,1);
+				return rescale;
+			}
+			var socket = io.connect('localhost');
+			var quakeData = [];
+			socket.on('entrance',function(){
+				setTimeout(function(){socket.emit('ready')},00);
+				var canvasContain = document.getElementById("canvasContainer");
+				canvasContain.className+='loading';
+			})
+			socket.on('sendQuakeData',function(data){
+				var quakeData = data.data;
+				quakeData.reverse();
+				var numPoints = quakeData.length;
+				var canvasContain = document.getElementById("canvasContainer");
+				canvasContain.className-='loading';
+				var canvas = document.getElementById('myCanvas');
+				console.log(quakeData.length);
+				var quakes = [];
+				var cities = [];
+				var mapScale = 1;
+				var countNum = numPoints * 20;
+				var timeStamp;
+				var zoomPos = 0;
+				var upDateClickPos;
+				var initDragX = 0;
+				var initDragY = 0;
+				var mapOffsetX = 0;
+				var mapOffsetY = 0;
+				var setShow = 0;
+				for(var i = 0; i < numPoints; i++) {
+					quakes[i] = new Quake(quakeData[i],i);
+				}
+				
+				for(var i = 0; i < cityData.length;i++){
+					cities[i] = new City(cityData[i]);
+				}
+
+				function sketchProc(p) {	
+					var rX=0;
+					var rY=0;
+					p.setup = function(){
+						p.size($(window).width(),$(window).height());
+						mapOffsetX = 0;
+						mapOffsetY = 0;
+						p.smooth();
+						zoomPos = p.height-40;
+						p.colorMode(p.HSB,100);
+						p.textMode(p.SCREEN);
+					
+					}
+				
+					p.draw = function() {
+						var fc = p.frameCount % numPoints*20;
+						
+						p.background(0);
+						mapScale = scaleValue(p,zoomPos);
+						p.pushMatrix();
+						p.translate(p.width/2,p.height/2,-20);
+						p.textAlign(p.RIGHT);
+						for(var i = 0; i < cities.length; i++) {
+							cities[i].calcPos(p,mapScale,mapOffsetX,mapOffsetY,timeStamp);
+							cities[i].display(p,mapScale);
+						}
+						p.textAlign(p.LEFT);
+						for(var i = 0; i < quakes.length; i++) {
+								quakes[i].calcPos(p,mapScale,mapOffsetX,mapOffsetY,timeStamp);
+							if(quakes[i].tester()) {
+								
+								timeStamp = quakes[i].dateString.slice(0,9);
+								}
+								
+								quakes[i].stateControl(p,fc,mapScale,setShow);
+							if(i < quakes.length-1) {
+								p.stroke(100,2);
+								//p.line(quakes[i].mapLon*mapScale,quakes[i].mapLat*mapScale,quakes[i+1].mapLon*mapScale,quakes[i+1].mapLat*mapScale)
+							}
+						}
+						p.popMatrix();
+						p.stroke(100);
+						p.fill(100,50);
+						p.text(timeStamp,50,p.height-24);
+						p.line(50, p.height-20,p.map(fc,0,countNum,50,p.width-50),p.height-20);
+						zoomControl(p,mapScale,zoomPos);
+
+					}
+					
+					p.mouseClicked = function() {
+						if (p.mouseX < 50) {
+							if (p.mouseY < 40) zoomPos = 40;
+							else if (p.mouseY > p.height - 40) zoomPos = p.height-40;
+							else zoomPos = p.mouseY;
+						}
+					}
+					
+					p.mousePressed = function() {
+						if (p.mouseX > 50) {
+							initDragX = p.mouseX;
+							initDragY = p.mouseY;
+						}
+					}
+					
+					p.mouseDragged = function() {
+						if (p.mouseX < 50) {
+							if (p.mouseY < 40) zoomPos = 40;
+							else if (p.mouseY > p.height - 40) zoomPos = p.height-40
+							else zoomPos = p.mouseY;
+							initDragX = p.mouseX;
+							initDragY = p.mouseY;
+						} else if (p.mouseX > 50) {
+							mapOffsetX += p.map(mapScale,1,30,.1,.00001)*(p.mouseX-initDragX);
+							mapOffsetY += p.map(mapScale,1,30,.1,.00001)*(p.mouseY-initDragY);
+						}
+					}
+					
+					p.keyPressed = function() {
+						console.log(p.key);
+						if(p.key.code == 49) {
+							setShow = 1;
+							console.log(setShow);
+						} else if (p.key.code == 50) {
+							setShow = 2;
+						} else if (p.key.code == 51) {
+							setShow = 3;
+						} else if (p.key.code == 52) {
+							setShow = 4;
+						} else if (p.key.code == 53) {
+							setShow = 5;
+						} else {
+							setShow = 0;
+						}
+					}
+				
+				}
+				var processingInstance = new Processing(canvas, sketchProc)
+
+			})
+	
+		
+		
+			
+		
+	body
+		block content
